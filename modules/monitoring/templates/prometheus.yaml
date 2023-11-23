@@ -1,0 +1,60 @@
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      failure-domain.beta.kubernetes.io/zone: ${availability_zone}
+    additionalScrapeConfigs: |
+      - job_name: 'kube-state-metrics'
+        static_configs:
+        - targets: ['kube-state-metrics-svc:8080']
+    securityContext:
+      runAsGroup: 0
+      runAsNonRoot: false
+      runAsUser: 0
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: ebs-storage-class
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+        selector:
+          matchLabels:
+            app: prometheus-stack
+prometheus-node-exporter:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+            - key: eks.amazonaws.com/compute-type
+              operator: NotIn
+              values:
+                - fargate
+grafana:
+  nodeSelector:
+    topology.kubernetes.io/zone: ${availability_zone}
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+      service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: ${cert_arn}
+      service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      kubernetes.io/ingress.class: alb
+    type: LoadBalancer
+  extraExposePorts:
+    - name: https
+      port: 443
+      targetPort: 3000
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: ebs-storage-class
+    accessModes:
+    - ReadWriteOnce
+    size: 10Gi
+    finalizers:
+    - kubernetes.io/pvc-protection
+    existingClaim: grafana-stack-pvc
